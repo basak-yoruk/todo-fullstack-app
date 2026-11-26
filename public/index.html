@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Görev Yöneticim</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="kutu">
+        
+        <!-- YENİ EKLENEN: Hareketli Duvar Kağıdı Seçici -->
+        <div class="tema-secici">
+            <span class="tema-etiket">Arka Plan:</span>
+            <button class="tema-btn aktif" data-tema="koyu" title="Saf Koyu" style="background: #121212;"></button>
+            <button class="tema-btn" data-tema="aurora" title="Kuzey Işıkları" style="background: linear-gradient(135deg, #064e3b, #0284c7);"></button>
+            <button class="tema-btn" data-tema="gunbatimi" title="Gün Batımı" style="background: linear-gradient(135deg, #7c2d12, #581c87);"></button>
+            <button class="tema-btn" data-tema="izgara" title="Siber Izgara" style="background: repeating-linear-gradient(45deg, #0f172a, #0f172a 4px, #1e293b 4px, #1e293b 8px);"></button>
+        </div>
+
+        <h2>Yapılacaklar Listesi</h2>
+
+        <!-- İlerleme Çubuğu Alanı -->
+        <div class="ilerleme-alani">
+            <div class="ilerleme-bilgi">
+                <span id="ilerlemeMetni">0 / 0 tamamlandı</span>
+                <span id="ilerlemeYuzde">%0</span>
+            </div>
+            <div class="ilerleme-cubuk-arkaplan">
+                <div class="ilerleme-cubuk-dolu" id="ilerlemeCubugu"></div>
+            </div>
+        </div>
+        
+        <!-- Tek Giriş Alanı -->
+        <!-- Tek Giriş Alanı + Öncelik Seçici -->
+       <!-- İki Satırlı Giriş Alanı -->
+        <div class="giris-alani">
+            <input type="text" id="gorevInput" placeholder="Bugün ne yapacaksın?">
+            <div class="giris-alt-satir">
+                <select id="oncelikSecici" title="Öncelik Seviyesi">
+                    <option value="normal">Normal</option>
+                    <option value="acil">Acil</option>
+                    <option value="dusuk">Düşük</option>
+                </select>
+                <input type="datetime-local" id="tarihSecici" title="Son Tarih ve Saat (İsteğe Bağlı)">
+                <button id="ekleBtn">Ekle</button>
+            </div>
+        </div>
+
+        <!-- YENİ EKLENEN: Anlık Arama Kutusu -->
+        <div class="arama-alani">
+            <input type="text" id="aramaInput" placeholder="🔍 Görevlerde ara...">
+        </div>
+
+        <!-- Filtreleme Sekmeleri -->
+        <div class="filtre-alani">
+            <button class="filtre-btn aktif" data-filtre="tumu">Tümü</button>
+            <button class="filtre-btn" data-filtre="yapilacak">Yapılacaklar</button>
+            <button class="filtre-btn" data-filtre="tamamlanan">Tamamlananlar</button>
+        </div>
+
+        <!-- Görev Listesi -->
+        <ul id="gorevListesi"></ul>
+
+        <!-- YENİ EKLENEN: Alt Bilgi ve Tümünü Temizle Butonu -->
+       <!-- Alt Bilgi, Yedekleme ve Tümünü Temizle -->
+    <!-- Alt Bilgi ve PDF İndirme -->
+        <div class="alt-alan">
+            <span id="kalanSayac">0 aktif görev</span>
+            <div class="alt-butonlar">
+                <button id="pdfIndirBtn" class="yedek-btn" title="Görev listesini PDF olarak indir">📄 PDF İndir</button>
+                <button id="tumunuTemizleBtn" class="temizle-btn">Tümünü Temizle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Dönüştürücü Kütüphane (Türkçe karakter destekli) -->
+    <!-- Konfeti ve PDF Kütüphaneleri -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
