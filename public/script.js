@@ -17,10 +17,33 @@ const pdfIndirBtn = document.getElementById("pdfIndirBtn");
 
 const API_URL = "/api/gorevler";
 
+// Tarayıcı / cihaz başına benzersiz kullanıcı kimliği
+function kullaniciKimligiAl() {
+    let uid = localStorage.getItem("todo_user_id");
+    if (!uid) {
+        uid = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : "user_" + Date.now() + "_" + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem("todo_user_id", uid);
+    }
+    return uid;
+}
+
+const USER_ID = kullaniciKimligiAl();
+
+function apiHeaders(jsonIcerik = false) {
+    const headers = { "x-user-id": USER_ID };
+    if (jsonIcerik) {
+        headers["Content-Type"] = "application/json";
+    }
+    return headers;
+}
+
 let gorevler = [];
 let aktifFiltre = "tumu";
 let aramaMetni = "";
 let suruklenenGorev = null;
+let duzenlenenGorevId = null;
 
 // Web Audio API ile onay sesi üretir
 function onaySesiCal() {
@@ -84,10 +107,12 @@ function varsayilanTarihiAyarla() {
     tarihSecici.value = yerelZaman.toISOString().slice(0, 16);
 }
 
-// 1. GET: Sunucudan tüm görevleri çek ve ekranı çiz
+// 1. GET: Sunucudan kullanıcının görevlerini çek ve ekranı çiz
 async function gorevleriGetir() {
     try {
-        const yanit = await fetch(API_URL);
+        const yanit = await fetch(API_URL, {
+            headers: apiHeaders()
+        });
         gorevler = await yanit.json();
         ekraniCiz();
     } catch (hata) {
@@ -95,48 +120,131 @@ async function gorevleriGetir() {
     }
 }
 
-// Satır içi görev metni düzenleme (PUT /api/gorevler/:id)
-function duzenlemeyiBaslat(icerikDiv, yaziSpan, gorev) {
-    const mevcutMetin = gorev.metin;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = mevcutMetin;
-    input.className = "duzenle-input";
+// Satır içi görev adı, önem derecesi ve tarih düzenleme (PUT /api/gorevler/:id)
+function duzenlemeyiBaslat(gorevLi, gorev) {
+    duzenlenenGorevId = gorev.id;
+    gorevLi.draggable = false;
+    gorevLi.className = `duzenleme-modu oncelik-${gorev.oncelik || "normal"}`;
+    gorevLi.innerHTML = "";
 
-    input.addEventListener("click", (e) => e.stopPropagation());
-    icerikDiv.replaceChild(input, yaziSpan);
-    input.focus();
+    const formDiv = document.createElement("div");
+    formDiv.className = "duzenle-form";
+    formDiv.addEventListener("click", (e) => e.stopPropagation());
 
-    let kaydedildi = false;
+    const metinInput = document.createElement("input");
+    metinInput.type = "text";
+    metinInput.value = gorev.metin;
+    metinInput.className = "duzenle-input";
+    metinInput.placeholder = "Görev adı...";
 
-    async function duzenlemeyiKaydet() {
-        if (kaydedildi) return;
-        kaydedildi = true;
+    const altSatir = document.createElement("div");
+    altSatir.className = "duzenle-alt-satir";
 
-        const yeniMetin = input.value.trim();
-        if (yeniMetin !== "" && yeniMetin !== mevcutMetin) {
-            gorev.metin = yeniMetin;
-            try {
-                await fetch(`${API_URL}/${gorev.id}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ metin: yeniMetin })
-                });
-            } catch (hata) {
-                console.error("Görev güncellenemedi:", hata);
-            }
-        }
-        ekraniCiz();
-    }
+    const oncelikSelect = document.createElement("select");
+    oncelikSelect.className = "duzenle-select";
+    oncelikSelect.title = "Öncelik Seviyesi";
+    oncelikSelect.innerHTML = `
+        <option value="normal">Normal</option>
+        <option value="acil">Acil</option>
+        <option value="dusuk">Düşük</option>
+    `;
+    oncelikSelect.value = gorev.oncelik || "normal";
 
-    input.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") duzenlemeyiKaydet();
+    const tarihGrup = document.createElement("div");
+    tarihGrup.className = "duzenle-tarih-grup";
+
+    const tarihInput = document.createElement("input");
+    tarihInput.type = "datetime-local";
+    tarihInput.className = "duzenle-tarih";
+    tarihInput.title = "Son Tarih ve Saat";
+    tarihInput.value = gorev.sonTarih ? gorev.sonTarih.slice(0, 16) : "";
+
+    const tarihTemizleBtn = document.createElement("button");
+    tarihTemizleBtn.type = "button";
+    tarihTemizleBtn.className = "tarih-temizle-btn";
+    tarihTemizleBtn.title = "Tarihi Kaldır";
+    tarihTemizleBtn.textContent = "×";
+    tarihTemizleBtn.addEventListener("click", () => {
+        tarihInput.value = "";
     });
 
-    input.addEventListener("blur", duzenlemeyiKaydet);
+    tarihGrup.appendChild(tarihInput);
+    tarihGrup.appendChild(tarihTemizleBtn);
+
+    altSatir.appendChild(oncelikSelect);
+    altSatir.appendChild(tarihGrup);
+
+    const butonlarDiv = document.createElement("div");
+    butonlarDiv.className = "duzenle-butonlar";
+
+    const iptalBtn = document.createElement("button");
+    iptalBtn.type = "button";
+    iptalBtn.className = "duzenle-iptal-btn";
+    iptalBtn.textContent = "İptal";
+    iptalBtn.addEventListener("click", () => {
+        duzenlenenGorevId = null;
+        ekraniCiz();
+    });
+
+    const kaydetBtn = document.createElement("button");
+    kaydetBtn.type = "button";
+    kaydetBtn.className = "duzenle-kaydet-btn";
+    kaydetBtn.textContent = "Kaydet";
+
+    async function degisiklikleriKaydet() {
+        const yeniMetin = metinInput.value.trim();
+        if (yeniMetin === "") {
+            alert("Görev adı boş bırakılamaz!");
+            metinInput.focus();
+            return;
+        }
+
+        const guncelVeri = {
+            metin: yeniMetin,
+            oncelik: oncelikSelect.value,
+            sonTarih: tarihInput.value || null
+        };
+
+        gorev.metin = guncelVeri.metin;
+        gorev.oncelik = guncelVeri.oncelik;
+        gorev.sonTarih = guncelVeri.sonTarih;
+        duzenlenenGorevId = null;
+        ekraniCiz();
+
+        try {
+            await fetch(`${API_URL}/${gorev.id}`, {
+                method: "PUT",
+                headers: apiHeaders(true),
+                body: JSON.stringify(guncelVeri)
+            });
+        } catch (hata) {
+            console.error("Görev güncellenemedi:", hata);
+        }
+    }
+
+    kaydetBtn.addEventListener("click", degisiklikleriKaydet);
+
+    metinInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") degisiklikleriKaydet();
+        if (e.key === "Escape") {
+            duzenlenenGorevId = null;
+            ekraniCiz();
+        }
+    });
+
+    butonlarDiv.appendChild(iptalBtn);
+    butonlarDiv.appendChild(kaydetBtn);
+
+    formDiv.appendChild(metinInput);
+    formDiv.appendChild(altSatir);
+    formDiv.appendChild(butonlarDiv);
+    gorevLi.appendChild(formDiv);
+
+    metinInput.focus();
 }
 
 function ekraniCiz() {
+    duzenlenenGorevId = null;
     gorevListesi.innerHTML = "";
 
     const suzulenGorevler = gorevler.filter(gorev => {
@@ -168,6 +276,7 @@ function ekraniCiz() {
 
         // Sürükle-Bırak Sıralama (PUT /api/gorevler)
         yeniGorev.addEventListener("dragstart", function() {
+            if (duzenlenenGorevId) return;
             suruklenenGorev = gorev;
             yeniGorev.classList.add("surukleniyor");
         });
@@ -201,7 +310,7 @@ function ekraniCiz() {
                 try {
                     await fetch(API_URL, {
                         method: "PUT",
-                        headers: { "Content-Type": "application/json" },
+                        headers: apiHeaders(true),
                         body: JSON.stringify(gorevler)
                     });
                 } catch (hata) {
@@ -228,7 +337,7 @@ function ekraniCiz() {
 
         yaziSpan.addEventListener("dblclick", function(olay) {
             olay.stopPropagation();
-            duzenlemeyiBaslat(icerikDiv, yaziSpan, gorev);
+            duzenlemeyiBaslat(yeniGorev, gorev);
         });
 
         icerikDiv.appendChild(yaziSpan);
@@ -252,6 +361,8 @@ function ekraniCiz() {
 
         // Tamamlandı Durumu Değiştirme (PUT /api/gorevler/:id)
         yeniGorev.addEventListener("click", async function() {
+            if (duzenlenenGorevId === gorev.id) return;
+
             gorev.tamamlandi = !gorev.tamamlandi;
 
             if (gorev.tamamlandi) {
@@ -271,7 +382,7 @@ function ekraniCiz() {
             try {
                 await fetch(`${API_URL}/${gorev.id}`, {
                     method: "PUT",
-                    headers: { "Content-Type": "application/json" },
+                    headers: apiHeaders(true),
                     body: JSON.stringify({ tamamlandi: gorev.tamamlandi })
                 });
             } catch (hata) {
@@ -295,7 +406,7 @@ function ekraniCiz() {
 
         duzenleBtn.addEventListener("click", function(olay) {
             olay.stopPropagation();
-            duzenlemeyiBaslat(icerikDiv, yaziSpan, gorev);
+            duzenlemeyiBaslat(yeniGorev, gorev);
         });
 
         const silBtn = document.createElement("button");
@@ -318,7 +429,8 @@ function ekraniCiz() {
 
             try {
                 await fetch(`${API_URL}/${gorev.id}`, {
-                    method: "DELETE"
+                    method: "DELETE",
+                    headers: apiHeaders()
                 });
             } catch (hata) {
                 console.error("Görev silinemedi:", hata);
@@ -384,7 +496,7 @@ async function gorevEkle() {
     try {
         const yanit = await fetch(API_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: apiHeaders(true),
             body: JSON.stringify(gonderilecekVeri)
         });
 
@@ -411,12 +523,15 @@ gorevInput.addEventListener("keypress", function(olay) {
 // Tümünü Temizle (DELETE /api/gorevler)
 if (tumunuTemizleBtn) {
     tumunuTemizleBtn.addEventListener("click", async function() {
-        if (confirm("Listedeki tüm görevleri sunucudan silmek istediğine emin misin?")) {
+        if (confirm("Listendeki tüm görevleri silmek istediğine emin misin?")) {
             gorevler = [];
             ekraniCiz();
 
             try {
-                await fetch(API_URL, { method: "DELETE" });
+                await fetch(API_URL, {
+                    method: "DELETE",
+                    headers: apiHeaders()
+                });
             } catch (hata) {
                 console.error("Liste temizlenemedi:", hata);
             }
@@ -500,7 +615,12 @@ if (pdfIndirBtn) {
     });
 }
 
-setInterval(ekraniCiz, 30000);
+// Düzenleme modundayken zamanlayıcının açık formu kapatmasını önle
+setInterval(() => {
+    if (!duzenlenenGorevId) {
+        ekraniCiz();
+    }
+}, 30000);
 
 // Sayfa açıldığında görevleri sunucudan yükle
 gorevleriGetir();
